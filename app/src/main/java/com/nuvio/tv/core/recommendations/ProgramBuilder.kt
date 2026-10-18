@@ -48,6 +48,17 @@ class ProgramBuilder @Inject constructor(
             builder.setPosterArtUri(uriWithCacheBuster)
         }
 
+        // Clear logo for launchers that draw it in place of the title text.
+        progress.logo?.takeIf { it.isNotBlank() }?.let {
+            builder.setLogoUri(Uri.parse(it))
+        }
+
+        // Synopsis shown under the title (movie overview, or the episode overview for series).
+        progress.description?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            builder.setDescription(it)
+            builder.setLongDescription(it)
+        }
+
         if (progress.duration > 0) {
             val positionMs = if (progress.position > 0) {
                 progress.position.toInt()

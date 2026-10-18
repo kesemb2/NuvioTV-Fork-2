@@ -94,7 +94,8 @@ internal fun CachedInProgressItem.toWatchProgress(useEpisodeThumbnails: Boolean)
         position = position,
         duration = duration,
         lastWatched = lastWatched,
-        progressPercent = progressPercent
+        progressPercent = progressPercent,
+        description = episodeDescription
     )
 }
 
@@ -118,6 +119,7 @@ internal fun CachedNextUpItem.toWatchProgress(useEpisodeThumbnails: Boolean): Wa
         episodeTitle = episodeTitle,
         position = 0,
         duration = 0,
-        lastWatched = sortTimestamp
+        lastWatched = sortTimestamp,
+        description = episodeDescription
     )
 }
