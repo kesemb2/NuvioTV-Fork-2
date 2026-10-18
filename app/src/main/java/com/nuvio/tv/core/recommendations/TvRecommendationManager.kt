@@ -55,7 +55,9 @@ class TvRecommendationManager @Inject constructor(
         val poster: String?,
         val backdrop: String?,
         val season: Int?,
-        val episode: Int?
+        val episode: Int?,
+        val logo: String? = null,
+        val description: String? = null
     )
 
     companion object {
@@ -66,7 +68,7 @@ class TvRecommendationManager @Inject constructor(
     suspend fun updateWatchNextFromCwItems(items: List<ContinueWatchingItem>) {
         val progressList = items.mapNotNull { item ->
             when (item) {
-                is ContinueWatchingItem.InProgress -> item.progress
+                is ContinueWatchingItem.InProgress -> item.progress.copy(description = item.episodeDescription)
                 is ContinueWatchingItem.NextUp -> WatchProgress(
                     contentId = item.info.contentId,
                     contentType = item.info.contentType,
@@ -80,7 +82,8 @@ class TvRecommendationManager @Inject constructor(
                     episodeTitle = item.info.episodeTitle,
                     position = 0L,
                     duration = 0L,
-                    lastWatched = item.info.lastWatched
+                    lastWatched = item.info.lastWatched,
+                    description = item.info.episodeDescription
                 )
             }
         }
@@ -113,7 +116,9 @@ class TvRecommendationManager @Inject constructor(
                             poster = p.poster,
                             backdrop = p.backdrop,
                             season = p.season,
-                            episode = p.episode
+                            episode = p.episode,
+                            logo = p.logo,
+                            description = p.description
                         )
                         val oldFingerprint = syncedFingerprints[id]
                         if (oldFingerprint != null &&
@@ -122,6 +127,8 @@ class TvRecommendationManager @Inject constructor(
                             oldFingerprint.backdrop == newFingerprint.backdrop &&
                             oldFingerprint.season == newFingerprint.season &&
                             oldFingerprint.episode == newFingerprint.episode &&
+                            oldFingerprint.logo == newFingerprint.logo &&
+                            oldFingerprint.description == newFingerprint.description &&
                             oldFingerprint.duration == newFingerprint.duration &&
                             abs(oldFingerprint.position - newFingerprint.position) < 2_000L
                         ) {
@@ -176,7 +183,9 @@ class TvRecommendationManager @Inject constructor(
                     poster = decorated.poster,
                     backdrop = decorated.backdrop,
                     season = decorated.season,
-                    episode = decorated.episode
+                    episode = decorated.episode,
+                    logo = decorated.logo,
+                    description = decorated.description
                 )
                 val oldFingerprint = syncedFingerprints[id]
                 if (oldFingerprint != null &&
@@ -185,6 +194,9 @@ class TvRecommendationManager @Inject constructor(
                     oldFingerprint.backdrop == newFingerprint.backdrop &&
                     oldFingerprint.season == newFingerprint.season &&
                     oldFingerprint.episode == newFingerprint.episode &&
+                    oldFingerprint.logo == newFingerprint.logo &&
+                    (newFingerprint.description == null ||
+                        oldFingerprint.description == newFingerprint.description) &&
                     oldFingerprint.duration == newFingerprint.duration &&
                     abs(oldFingerprint.position - newFingerprint.position) < 2_000L
                 ) {

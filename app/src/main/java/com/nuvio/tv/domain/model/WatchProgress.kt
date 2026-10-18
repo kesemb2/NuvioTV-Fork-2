@@ -34,7 +34,9 @@ data class WatchProgress(
     override val trackingProviderItemId: String? = null,
     override val trackingSourceUrl: String? = null,
     val completionThresholdOverride: Float? = null,
-    val excludedNextUpSeasons: Set<Int> = emptySet()
+    val excludedNextUpSeasons: Set<Int> = emptySet(),
+    /** Synopsis shown by TV launchers under the title. Not persisted. */
+    @Transient val description: String? = null
 ) : TrackingAttributedItem {
     override val trackingContentId: String
         get() = contentId
