@@ -5,10 +5,12 @@ import android.content.pm.PackageManager
 import androidx.tvprovider.media.tv.WatchNextProgram
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.domain.repository.MetaRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.unmockkAll
 import io.mockk.verify
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -22,6 +24,7 @@ class TvRecommendationManagerTest {
     private val programBuilder: ProgramBuilder = mockk(relaxed = true)
     private val program: WatchNextProgram = mockk(relaxed = true)
     private val layout: LayoutPreferenceDataStore = mockk(relaxed = true)
+    private val metaRepository: MetaRepository = mockk(relaxed = true)
     private lateinit var manager: TvRecommendationManager
 
     @Before
@@ -32,8 +35,10 @@ class TvRecommendationManagerTest {
         every { programBuilder.buildWatchNextProgram(any()) } returns program
         every { layout.customPosterUrlPattern } returns flowOf("")
         every { layout.customPosterEnabledScreens } returns flowOf(emptySet())
+        every { metaRepository.getCachedMeta(any(), any()) } returns null
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any()) } returns emptyFlow()
         TvRecommendationManager.isPlaybackActive.value = false
-        manager = TvRecommendationManager(context, programBuilder, layout)
+        manager = TvRecommendationManager(context, programBuilder, layout, metaRepository)
     }
 
     @After

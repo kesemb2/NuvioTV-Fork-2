@@ -6,8 +6,10 @@ import android.util.Log
 import com.nuvio.tv.core.poster.CustomPosterScreen
 import com.nuvio.tv.core.poster.patternForScreen
 import com.nuvio.tv.core.poster.withCustomPosterArt
+import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -15,10 +17,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,11 +33,17 @@ import kotlin.math.abs
 class TvRecommendationManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val programBuilder: ProgramBuilder,
-    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val metaRepository: MetaRepository
 ) {
 
     private val mutex = Mutex()
     private val syncedFingerprints = ConcurrentHashMap<String, ProgramFingerprint>()
+
+    // Synopsis and logo per title/episode, so launchers get them even from the player's write,
+    // which knows neither. Only successful lookups are kept.
+    private data class LauncherDetails(val description: String?, val logo: String?)
+    private val launcherDetailsCache = ConcurrentHashMap<String, LauncherDetails>()
     private val deferScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Latest progress seen while frames are on screen. Leanback IPC is deferred until playback
@@ -62,6 +72,7 @@ class TvRecommendationManager @Inject constructor(
 
     companion object {
         const val TAG = "TvRecommendation"
+        private const val META_LOOKUP_TIMEOUT_MS = 5_000L
         val isPlaybackActive = MutableStateFlow(false)
     }
 
@@ -97,6 +108,7 @@ class TvRecommendationManager @Inject constructor(
                 try {
                     val posterPattern = recommendationPosterPattern()
                     val decorated = items.withCustomPosterArt(posterPattern)
+                        .map { withLauncherDetails(it) }
                     val currentInternalIds = decorated.map { programBuilder.watchNextId(it) }.toSet()
                     val existingInternalIds = programBuilder.getAllWatchNextInternalIds()
 
@@ -174,7 +186,7 @@ class TvRecommendationManager @Inject constructor(
                 return@withContext
             }
             try {
-                val decorated = progress.withCustomPosterArt(recommendationPosterPattern())
+                val decorated = withLauncherDetails(progress.withCustomPosterArt(recommendationPosterPattern()))
                 val id = programBuilder.watchNextId(decorated)
                 val newFingerprint = ProgramFingerprint(
                     title = decorated.name,
@@ -210,6 +222,44 @@ class TvRecommendationManager @Inject constructor(
                 Log.w(TAG, "updateSingleWatchNextProgram failed", e)
             }
         }
+    }
+
+    private suspend fun withLauncherDetails(progress: WatchProgress): WatchProgress {
+        val hasDescription = !progress.description.isNullOrBlank()
+        val hasLogo = !progress.logo.isNullOrBlank()
+        if (hasDescription && hasLogo) return progress
+
+        val key = "${progress.contentType}:${progress.contentId}:${progress.season}:${progress.episode}"
+        val details = launcherDetailsCache[key]
+            ?: lookupLauncherDetails(progress)?.also { launcherDetailsCache[key] = it }
+            ?: return progress
+
+        return progress.copy(
+            description = if (hasDescription) progress.description else details.description,
+            logo = if (hasLogo) progress.logo else details.logo
+        )
+    }
+
+    private suspend fun lookupLauncherDetails(progress: WatchProgress): LauncherDetails? {
+        val meta = runCatching { metaRepository.getCachedMeta(progress.contentType, progress.contentId) }
+            .getOrNull()
+            ?: withTimeoutOrNull(META_LOOKUP_TIMEOUT_MS) {
+                runCatching {
+                    metaRepository.getMetaFromAllAddons(type = progress.contentType, id = progress.contentId)
+                        .firstOrNull { it is NetworkResult.Success }
+                }.getOrNull()
+            }?.let { (it as? NetworkResult.Success)?.data }
+            ?: return null
+
+        val episodeOverview = if (progress.season != null && progress.episode != null) {
+            meta.videos.firstOrNull { it.season == progress.season && it.episode == progress.episode }
+                ?.overview?.takeIf { it.isNotBlank() }
+        } else null
+
+        return LauncherDetails(
+            description = episodeOverview ?: meta.description?.takeIf { it.isNotBlank() },
+            logo = meta.logo?.takeIf { it.isNotBlank() }
+        )
     }
 
     private suspend fun recommendationPosterPattern(): String {
