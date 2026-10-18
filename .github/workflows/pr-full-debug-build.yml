@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pr-full-debug-build-${{ github.event.pull_request.number || github.ref }}
@@ -76,3 +76,17 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish test APK for direct download
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/full/debug/app-full-universal-debug.apk nuvio-test.apk
+          gh release delete test-apk --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create test-apk nuvio-test.apk \
+            -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Nuvio Arc Test (launcher logo test)" \
+            --notes "Test build that sends the logo and synopsis to the Android TV Watch Next list. Installs next to the regular app."
